@@ -457,6 +457,7 @@ export const ServerHealthMonitor = () => {
     { name: 'OPhim (Primary)', url: 'https://ophim1.com/v1/api/danh-sach/phim-moi-cap-nhat?page=1', ping: 'ophim1.com', status: 'checking', responseTime: 0 },
     { name: 'PhimAPI (Fallback)', url: 'https://phimapi.com/danh-sach/phim-moi-cap-nhat?page=1', ping: 'phimapi.com', status: 'checking', responseTime: 0 },
     { name: 'NguonC', url: 'https://phim.nguonc.com/api/films/phim-moi-cap-nhat?page=1', ping: 'phim.nguonc.com', status: 'checking', responseTime: 0 },
+    { name: 'VSMov', url: 'https://vsmov.com/api/danh-sach/phim-moi-cap-nhat', ping: 'vsmov.com', status: 'checking', responseTime: 0 },
   ]);
 
   const checkServers = async () => {
