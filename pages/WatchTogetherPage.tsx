@@ -35,11 +35,18 @@ const SyncVideoPlayer: React.FC<SyncPlayerProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const lastSyncRef = useRef<number>(0);
   const isEmbedRef = useRef(false);
   const [isUsingFallback, setIsUsingFallback] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [showSyncToast, setShowSyncToast] = useState(false);
+
+  // Guest custom controls state
+  const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
+  const [showGuestControls, setShowGuestControls] = useState(false);
+  const hideControlsTimer = useRef<ReturnType<typeof setTimeout>>();
 
   const isEmbed = src && !src.toLowerCase().includes('.m3u8') && !src.toLowerCase().includes('.mp4');
   isEmbedRef.current = isEmbed;
@@ -108,6 +115,41 @@ const SyncVideoPlayer: React.FC<SyncPlayerProps> = ({
     if (!isPlaying && !video.paused) video.pause();
   }, [syncState, isHost]);
 
+  // Guest: apply volume changes
+  useEffect(() => {
+    if (!videoRef.current || isHost) return;
+    videoRef.current.volume = volume;
+    videoRef.current.muted = isMuted;
+  }, [volume, isMuted, isHost]);
+
+  const handleMouseMove = () => {
+    if (isHost || isEmbed) return;
+    setShowGuestControls(true);
+    clearTimeout(hideControlsTimer.current);
+    hideControlsTimer.current = setTimeout(() => setShowGuestControls(false), 2500);
+  };
+
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = parseFloat(e.target.value);
+    setVolume(v);
+    setIsMuted(v === 0);
+  };
+
+  const handleToggleMute = () => {
+    setIsMuted(m => !m);
+    if (videoRef.current) videoRef.current.muted = !isMuted;
+  };
+
+  const handleFullscreen = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (!document.fullscreenElement) {
+      el.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen();
+    }
+  };
+
   if (isEmbed || isUsingFallback) {
     const finalUrl = isUsingFallback ? (fallbackSrc || src) : src;
     return (
@@ -123,25 +165,70 @@ const SyncVideoPlayer: React.FC<SyncPlayerProps> = ({
   }
 
   return (
-    <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-2xl">
+    <div
+      ref={containerRef}
+      className="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-2xl group"
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => !isHost && setShowGuestControls(false)}
+    >
       {showSyncToast && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 bg-indigo-600/90 text-white px-4 py-1.5 rounded-full text-xs font-bold animate-in fade-in slide-in-from-top-2">
           🔄 Đã đồng bộ với host
         </div>
       )}
+
+      {/* Host badge for guests */}
       {!isHost && (
-        <div className="absolute top-3 right-3 z-20 bg-slate-900/80 text-slate-300 px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1">
+        <div className={`absolute top-3 right-3 z-20 bg-slate-900/80 text-slate-300 px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-opacity ${showGuestControls ? 'opacity-0' : 'opacity-100'}`}>
           <Crown size={10} className="text-amber-400" /> Host điều khiển
         </div>
       )}
+
       <video
         ref={videoRef}
         className="w-full h-full object-contain"
         controls={isHost}
-        controlsList={isHost ? undefined : 'noplaybackrate'}
         poster={poster}
         playsInline
       />
+
+      {/* Guest custom controls overlay */}
+      {!isHost && (
+        <div className={`absolute bottom-0 left-0 right-0 px-4 py-3 bg-gradient-to-t from-black/80 via-black/40 to-transparent transition-all duration-300 ${showGuestControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
+          <div className="flex items-center justify-between gap-4">
+            {/* Volume */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleToggleMute}
+                className="text-white hover:text-indigo-300 transition-colors flex-shrink-0"
+              >
+                {isMuted || volume === 0
+                  ? <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M11 5L6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+                  : <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                }
+              </button>
+              <input
+                type="range" min="0" max="1" step="0.05"
+                value={isMuted ? 0 : volume}
+                onChange={handleVolumeChange}
+                className="w-20 accent-indigo-500 cursor-pointer"
+              />
+            </div>
+
+            {/* Hint */}
+            <span className="text-[10px] text-white/50 font-bold">Âm lượng & Toàn màn hình</span>
+
+            {/* Fullscreen */}
+            <button
+              onClick={handleFullscreen}
+              className="text-white hover:text-indigo-300 transition-colors flex-shrink-0"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+            </button>
+          </div>
+        </div>
+      )}
+
       {hasError && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90">
           <p className="text-white font-bold mb-4">Lỗi phát video</p>
@@ -150,6 +237,7 @@ const SyncVideoPlayer: React.FC<SyncPlayerProps> = ({
     </div>
   );
 };
+
 
 // ── Join Screen ──────────────────────────────────────────
 const JoinScreen = ({ roomId, onJoin }: { roomId: string; onJoin: (name: string) => void }) => {
@@ -220,7 +308,8 @@ export const WatchTogetherPage = () => {
   // Chat state
   const [messages, setMessages] = useState<[string, ChatMessage][]>([]);
   const [chatInput, setChatInput] = useState('');
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null); // the scrollable container
+  const chatEndRef = useRef<HTMLDivElement>(null);    // sentinel at bottom
 
   // UI state
   const [copied, setCopied] = useState(false);
@@ -284,7 +373,12 @@ export const WatchTogetherPage = () => {
     if (!roomId || !joined) return;
     const unsub = listenChat(roomId, msgs => {
       setMessages(msgs);
-      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      // Scroll only the chat container, NOT the whole page
+      setTimeout(() => {
+        if (chatScrollRef.current) {
+          chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+        }
+      }, 50);
     });
     return unsub;
   }, [roomId, joined]);
@@ -598,7 +692,7 @@ export const WatchTogetherPage = () => {
             <div className="p-3 border-b border-slate-800">
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">💬 Chat</p>
             </div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-3 space-y-2">
               {messages.map(([id, msg]) => (
                 <div key={id} className={`${msg.type === 'system' ? 'text-center' : ''}`}>
                   {msg.type === 'system' ? (

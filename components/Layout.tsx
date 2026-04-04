@@ -128,7 +128,6 @@ export const Header = () => {
     { name: 'Phim Lẻ', path: '/danh-sach/phim-le', icon: Film, color: 'text-indigo-400' },
     { name: 'Hoạt Hình', path: '/danh-sach/hoat-hinh', icon: Library, color: 'text-emerald-400' },
     { name: 'Phim Mới', path: '/danh-sach/phim-moi', icon: Sparkles, color: 'text-yellow-400' },
-    { name: 'Xem Chung', path: '/xem-chung', icon: Users, color: 'text-indigo-400' },
   ];
 
   const personalLinks = [
@@ -174,7 +173,18 @@ export const Header = () => {
             ))}
           </nav>
 
-          {/* Genre Dropdown Button */}
+          {/* Xem Chung standalone button */}
+          <Link
+            to="/xem-chung"
+            className={`h-9 px-3 flex items-center gap-1.5 rounded-full text-[13px] font-bold transition-all border backdrop-blur-md whitespace-nowrap ${
+              location.pathname === '/xem-chung'
+                ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/30'
+                : 'bg-indigo-600/10 border-indigo-500/30 text-indigo-400 hover:bg-indigo-600 hover:text-white'
+            }`}
+          >
+            <Users size={13} />
+            <span className="hidden lg:inline">Xem Chung</span>
+          </Link>
           <button
             onClick={() => setActiveDropdown(activeDropdown === 'genre' ? null : 'genre')}
             className={`h-9 px-3 flex items-center gap-1.5 rounded-full text-[13px] font-bold transition-all border backdrop-blur-md whitespace-nowrap ${activeDropdown === 'genre'
