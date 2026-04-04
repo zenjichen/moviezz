@@ -193,11 +193,34 @@ export const listenPublicRooms = (
     const val = snap.val();
     if (!val) { cb([]); return; }
     const now = Date.now();
-    // Only show rooms active in last 30 minutes
+    const THIRTY_MIN = 30 * 60 * 1000;
+    const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+
     const active = (Object.values(val) as PublicRoomEntry[])
-      .filter(room => now - room.lastActive < 30 * 60 * 1000)
+      .filter(room =>
+        // Active in last 30 minutes AND created within 7 days
+        (now - room.lastActive < THIRTY_MIN) &&
+        (now - room.createdAt < SEVEN_DAYS)
+      )
       .sort((a, b) => b.lastActive - a.lastActive);
     cb(active);
   });
   return () => off(r);
+};
+
+// Cleanup: remove public_rooms entries older than 7 days (client-side GC)
+export const cleanupOldPublicRooms = async (): Promise<void> => {
+  try {
+    const snap = await get(ref(db, 'public_rooms'));
+    const val = snap.val();
+    if (!val) return;
+    const now = Date.now();
+    const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+    const stale = Object.entries(val as Record<string, PublicRoomEntry>)
+      .filter(([, entry]) => now - entry.createdAt > SEVEN_DAYS)
+      .map(([id]) => id);
+    await Promise.all(stale.map(id => removePublicRoom(id)));
+  } catch {
+    // Silent - cleanup is best-effort
+  }
 };

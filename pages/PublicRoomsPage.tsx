@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { listenPublicRooms, PublicRoomEntry } from '../services/firebase';
+import { listenPublicRooms, cleanupOldPublicRooms, PublicRoomEntry } from '../services/firebase';
 import { getImageUrl } from '../services/api';
-import { Users, Globe, Lock, Clock, Play, RefreshCw, Tv } from 'lucide-react';
+import { Users, Globe, Lock, Clock, Play, Tv } from 'lucide-react';
 
 const timeAgo = (ts: number): string => {
   const diff = Math.floor((Date.now() - ts) / 1000);
@@ -16,15 +16,38 @@ export const PublicRoomsPage = () => {
   const navigate = useNavigate();
   const [rooms, setRooms] = useState<PublicRoomEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [, setTick] = useState(0); // force re-render to update timeAgo
 
   useEffect(() => {
     document.title = 'Phòng Xem Chung - Hà Movie House';
+
+    // Run cleanup of 7-day-old entries once
+    cleanupOldPublicRooms();
+
+    // Real-time listener
     const unsub = listenPublicRooms(data => {
       setRooms(data);
       setLoading(false);
     });
-    return () => { unsub(); document.title = 'Hà Movie House - Xem Phim Online'; };
+
+    // Periodic tick every 30s to re-filter stale rooms and update timeAgo display
+    const ticker = setInterval(() => setTick(t => t + 1), 30_000);
+
+    return () => {
+      unsub();
+      clearInterval(ticker);
+      document.title = 'Hà Movie House - Xem Phim Online';
+    };
   }, []);
+
+  // Client-side filter: remove rooms inactive > 30 min or older than 7 days
+  const THIRTY_MIN = 30 * 60 * 1000;
+  const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const visibleRooms = rooms.filter(r =>
+    (now - r.lastActive < THIRTY_MIN) && (now - r.createdAt < SEVEN_DAYS)
+  );
+
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 animate-in fade-in duration-500">
@@ -42,13 +65,13 @@ export const PublicRoomsPage = () => {
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-xs font-bold">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            {rooms.length} phòng đang hoạt động
+            {visibleRooms.length} phòng đang hoạt động
           </div>
         </div>
       </div>
 
       {/* Empty State */}
-      {!loading && rooms.length === 0 && (
+      {!loading && visibleRooms.length === 0 && (
         <div className="flex flex-col items-center justify-center py-24 gap-4">
           <div className="w-20 h-20 bg-slate-900 border border-slate-800 rounded-3xl flex items-center justify-center">
             <Tv size={36} className="text-slate-600" />
@@ -84,9 +107,9 @@ export const PublicRoomsPage = () => {
       )}
 
       {/* Room Grid */}
-      {!loading && rooms.length > 0 && (
+      {!loading && visibleRooms.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {rooms.map(room => (
+          {visibleRooms.map(room => (
             <div
               key={room.roomId}
               className="group bg-slate-900/50 border border-slate-800 hover:border-indigo-500/50 rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-xl hover:shadow-indigo-900/20 hover:-translate-y-0.5"
