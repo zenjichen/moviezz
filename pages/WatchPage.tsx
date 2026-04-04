@@ -124,6 +124,10 @@ export const WatchPage = () => {
       episodeName: currentEpisode.name,
       serverIndex: activeServerIndex,
       hostId: user.id,
+      hostName: user.name,
+      hostEmoji: user.emoji,
+      isPublic: false,
+      lastActive: Date.now(),
       playback: { isPlaying: false, currentTime: 0, updatedAt: Date.now() },
       members: {
         [user.id]: { name: user.name, emoji: user.emoji, isHost: true, lastSeen: Date.now() }

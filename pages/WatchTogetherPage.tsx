@@ -8,13 +8,14 @@ import {
   generateUserId, generateRoomId, getRandomEmoji,
   createRoom, getRoom, joinRoom, updatePlayback, updateEpisode,
   sendChat, listenRoom, listenChat, updateLastSeen, removeRoom,
+  setRoomVisibility, updatePublicRoomActivity,
   getLocalUser, saveLocalUser,
   RoomData, ChatMessage, MemberData
 } from '../services/firebase';
 import {
   Users, Send, Copy, Check, X, Crown, Play, Pause,
   ChevronLeft, ChevronRight, Settings, Mic2, List,
-  Link as LinkIcon, LogOut, Loader2
+  Link as LinkIcon, LogOut, Loader2, Globe, Lock, Eye, EyeOff
 } from 'lucide-react';
 import Hls from 'hls.js';
 
@@ -229,6 +230,22 @@ export const WatchTogetherPage = () => {
   const isHost = room?.hostId === userId;
   const shareUrl = `${window.location.origin}${window.location.pathname}#/xem-chung/${roomId}`;
 
+  const handleTogglePublic = async () => {
+    if (!room || !roomId) return;
+    const newPublic = !room.isPublic;
+    const memberCount = Object.keys(room.members || {}).length;
+    await setRoomVisibility(roomId, newPublic, newPublic ? {
+      movieName: room.movieName,
+      movieThumb: room.movieThumb,
+      episodeName: room.episodeName,
+      hostName: room.hostName,
+      hostEmoji: room.hostEmoji,
+      memberCount,
+      lastActive: Date.now(),
+      createdAt: room.createdAt,
+    } : undefined);
+  };
+
   // Load movie data
   useEffect(() => {
     if (!room?.movieSlug) return;
@@ -272,12 +289,18 @@ export const WatchTogetherPage = () => {
     return unsub;
   }, [roomId, joined]);
 
-  // Heartbeat
+  // Heartbeat: update lastSeen + sync public room activity
   useEffect(() => {
     if (!roomId || !joined) return;
-    const interval = setInterval(() => updateLastSeen(roomId, userId), 15000);
+    const interval = setInterval(() => {
+      updateLastSeen(roomId, userId);
+      if (room?.isPublic) {
+        const memberCount = Object.keys(room.members || {}).length;
+        updatePublicRoomActivity(roomId, memberCount, room.episodeName);
+      }
+    }, 15000);
     return () => clearInterval(interval);
-  }, [roomId, joined, userId]);
+  }, [roomId, joined, userId, room?.isPublic, room?.members, room?.episodeName]);
 
   // Check room exists on initial load
   useEffect(() => {
@@ -433,6 +456,21 @@ export const WatchTogetherPage = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Public/Private toggle - host only */}
+          {isHost && (
+            <button
+              onClick={handleTogglePublic}
+              className={`flex items-center gap-1.5 h-8 px-3 border text-xs font-bold rounded-xl transition-all ${
+                room.isPublic
+                  ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/30'
+                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
+              }`}
+              title={room.isPublic ? 'Đang công khai — nhấn để đặt riêng tư' : 'Đang riêng tư — nhấn để công khai'}
+            >
+              {room.isPublic ? <Globe size={12} /> : <Lock size={12} />}
+              {room.isPublic ? 'Công khai' : 'Riêng tư'}
+            </button>
+          )}
           <button
             onClick={handleCopyLink}
             className="flex items-center gap-1.5 h-8 px-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-bold rounded-xl transition-all"

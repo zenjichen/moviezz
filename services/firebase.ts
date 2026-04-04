@@ -49,8 +49,25 @@ export interface RoomData {
   episodeName: string;
   serverIndex: number;
   hostId: string;
+  hostName: string;
+  hostEmoji: string;
+  isPublic: boolean;
   playback: PlaybackState;
   members: Record<string, MemberData>;
+  createdAt: number;
+  lastActive: number;
+}
+
+// Lightweight public index entry (separate node, no full room data)
+export interface PublicRoomEntry {
+  roomId: string;
+  movieName: string;
+  movieThumb: string;
+  episodeName: string;
+  hostName: string;
+  hostEmoji: string;
+  memberCount: number;
+  lastActive: number;
   createdAt: number;
 }
 
@@ -136,6 +153,51 @@ export const listenChat = (
   onValue(r, snap => {
     const val = snap.val();
     cb(val ? (Object.entries(val) as [string, ChatMessage][]) : []);
+  });
+  return () => off(r);
+};
+
+// ── Public rooms index ────────────────────────────────────
+export const upsertPublicRoom = async (roomId: string, entry: Omit<PublicRoomEntry, 'roomId'>): Promise<void> => {
+  await set(ref(db, `public_rooms/${roomId}`), { ...entry, roomId });
+};
+
+export const removePublicRoom = async (roomId: string): Promise<void> => {
+  await remove(ref(db, `public_rooms/${roomId}`));
+};
+
+export const setRoomVisibility = async (
+  roomId: string, isPublic: boolean, entry?: Omit<PublicRoomEntry, 'roomId'>
+): Promise<void> => {
+  await update(ref(db, `rooms/${roomId}`), { isPublic });
+  if (isPublic && entry) {
+    await upsertPublicRoom(roomId, entry);
+  } else {
+    await removePublicRoom(roomId);
+  }
+};
+
+export const updatePublicRoomActivity = async (
+  roomId: string, memberCount: number, episodeName: string
+): Promise<void> => {
+  await update(ref(db, `public_rooms/${roomId}`), {
+    memberCount, episodeName, lastActive: Date.now()
+  }).catch(() => {});
+};
+
+export const listenPublicRooms = (
+  cb: (rooms: PublicRoomEntry[]) => void
+): (() => void) => {
+  const r = ref(db, 'public_rooms');
+  onValue(r, snap => {
+    const val = snap.val();
+    if (!val) { cb([]); return; }
+    const now = Date.now();
+    // Only show rooms active in last 30 minutes
+    const active = (Object.values(val) as PublicRoomEntry[])
+      .filter(room => now - room.lastActive < 30 * 60 * 1000)
+      .sort((a, b) => b.lastActive - a.lastActive);
+    cb(active);
   });
   return () => off(r);
 };
