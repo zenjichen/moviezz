@@ -10,6 +10,7 @@ import { CategoryPage } from './pages/CategoryPage';
 import { FavoritesPage } from './pages/FavoritesPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { FilterPage } from './pages/FilterPage';
+import { WatchTogetherPage } from './pages/WatchTogetherPage';
 import { Clapperboard, Play } from 'lucide-react';
 import { api, getImageUrl } from './services/api';
 
@@ -318,6 +319,7 @@ function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/phim/:slug" element={<MovieDetailPage />} />
             <Route path="/xem-phim/:slug/:episodeSlug" element={<WatchPage />} />
+            <Route path="/xem-chung/:roomId" element={<WatchTogetherPage />} />
             <Route path="/tim-kiem" element={<SearchPage />} />
             <Route path="/danh-sach/:type" element={<CategoryPage />} />
             <Route path="/the-loai/:slug" element={<FilterPage />} />

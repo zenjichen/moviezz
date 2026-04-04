@@ -6,7 +6,11 @@ import { MovieDetail, ServerData, Episode, Movie } from '../types';
 import { Loader, MovieCard, SectionTitle } from '../components/UI';
 import { VideoPlayer } from '../components/VideoPlayer';
 import { storage } from '../utils/storage';
-import { ChevronLeft, ChevronRight, List, Settings, Mic2, Play, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, List, Settings, Mic2, Play, X, Users, Copy, Check, Loader2 } from 'lucide-react';
+import {
+  generateRoomId, generateUserId, getRandomEmoji,
+  createRoom, getLocalUser, saveLocalUser
+} from '../services/firebase';
 
 export const WatchPage = () => {
   const { slug, episodeSlug } = useParams<{ slug: string; episodeSlug: string }>();
@@ -21,6 +25,10 @@ export const WatchPage = () => {
   const [recommendedMovies, setRecommendedMovies] = useState<Movie[]>([]);
   
   const lastSavedTime = useRef(0);
+  const [showWTModal, setShowWTModal] = useState(false);
+  const [creatingRoom, setCreatingRoom] = useState(false);
+  const [wtRoomLink, setWtRoomLink] = useState('');
+  const [linkCopied, setLinkCopied] = useState(false);
 
   useEffect(() => {
     // Scroll to top whenever episodeSlug changes to focus on the video player
@@ -96,8 +104,35 @@ export const WatchPage = () => {
   };
 
   const handleEnded = () => {
-    // Auto-next functionality removed as per request
-    console.log("Video ended. User will manually select next episode.");
+    console.log("Video ended.");
+  };
+
+  const handleCreateWatchTogether = async () => {
+    if (!movie || !currentEpisode) return;
+    setCreatingRoom(true);
+    const roomId = generateRoomId();
+    let user = getLocalUser();
+    if (!user) {
+      user = { id: generateUserId(), name: 'Host', emoji: getRandomEmoji() };
+      saveLocalUser(user);
+    }
+    await createRoom(roomId, {
+      movieSlug: movie.slug,
+      movieName: movie.name,
+      movieThumb: movie.thumb_url || movie.poster_url || '',
+      episodeSlug: currentEpisode.slug,
+      episodeName: currentEpisode.name,
+      serverIndex: activeServerIndex,
+      hostId: user.id,
+      playback: { isPlaying: false, currentTime: 0, updatedAt: Date.now() },
+      members: {
+        [user.id]: { name: user.name, emoji: user.emoji, isHost: true, lastSeen: Date.now() }
+      },
+    });
+    const link = `${window.location.origin}${window.location.pathname}#/xem-chung/${roomId}`;
+    setWtRoomLink(link);
+    setCreatingRoom(false);
+    setShowWTModal(true);
   };
 
   const cleanServerName = (name: string) => {
@@ -154,6 +189,14 @@ export const WatchPage = () => {
                     <span className="flex-shrink-0">/</span>
                     <span className="text-white font-bold flex-shrink-0">Tập {currentEpisode.name}</span>
                </div>
+               <button
+                 onClick={handleCreateWatchTogether}
+                 disabled={creatingRoom}
+                 className="flex-shrink-0 flex items-center gap-1.5 h-8 px-3 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-600/40 hover:border-indigo-500 text-indigo-400 hover:text-white text-xs font-bold rounded-xl transition-all disabled:opacity-50"
+               >
+                 {creatingRoom ? <Loader2 size={12} className="animate-spin" /> : <Users size={12} />}
+                 Xem chung
+               </button>
            </div>
 
            <div className="w-full bg-black rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10 mb-6">
@@ -224,6 +267,53 @@ export const WatchPage = () => {
                 {recommendedMovies.map(m => <MovieCard key={m._id} movie={m} />)}
             </div>
         </section>
+      )}
+
+      {/* Watch Together Modal */}
+      {showWTModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-300">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-indigo-600 rounded-xl"><Users size={18} className="text-white" /></div>
+                <h3 className="text-white font-black text-base">Phòng đã tạo! 🎉</h3>
+              </div>
+              <button onClick={() => setShowWTModal(false)} className="text-slate-500 hover:text-white transition-colors"><X size={18} /></button>
+            </div>
+
+            <p className="text-slate-400 text-sm mb-4">Chia sẻ link này để bạn bè cùng xem phim với bạn:</p>
+
+            <div className="flex gap-2 mb-4">
+              <input
+                value={wtRoomLink}
+                readOnly
+                className="flex-1 h-10 bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-xl px-3 outline-none font-mono"
+              />
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(wtRoomLink);
+                  setLinkCopied(true);
+                  setTimeout(() => setLinkCopied(false), 2000);
+                }}
+                className="h-10 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl flex items-center gap-1.5 text-xs font-bold transition-all flex-shrink-0"
+              >
+                {linkCopied ? <Check size={14} /> : <Copy size={14} />}
+                {linkCopied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+
+            <button
+              onClick={() => {
+                setShowWTModal(false);
+                const roomId = wtRoomLink.split('/xem-chung/')[1];
+                navigate(`/xem-chung/${roomId}`);
+              }}
+              className="w-full h-11 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-2xl transition-all flex items-center justify-center gap-2"
+            >
+              <Play size={16} fill="currentColor" /> Vào phòng ngay
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
