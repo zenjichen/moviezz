@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, Menu, X, Heart, Clock, Film, Tv, Star, Clapperboard, User, Phone, Play, Filter, Loader2, Zap, Library, ChevronRight, Sparkles, LayoutGrid, ChevronUp, Mail, Send, ShieldCheck, FileText, Info as InfoIcon, ChevronDown, Globe, Tag, Download, Settings, Monitor, Smartphone, Apple, Laptop, TvMinimal, ExternalLink, Check, Pencil } from 'lucide-react';
+import { Search, Menu, X, Heart, Clock, Film, Tv, Star, Clapperboard, User, Phone, Play, Filter, Loader2, Zap, Library, ChevronRight, Sparkles, LayoutGrid, ChevronUp, Mail, Send, ShieldCheck, FileText, Info as InfoIcon, ChevronDown, Globe, Tag, Download, Settings, Monitor, Smartphone, Apple, Laptop, TvMinimal, ExternalLink, Check, Pencil, Users } from 'lucide-react';
 import { api, getImageUrl } from '../services/api';
 import { Movie } from '../types';
 import { storage } from '../utils/storage';
@@ -128,6 +128,7 @@ export const Header = () => {
     { name: 'Phim Lẻ', path: '/danh-sach/phim-le', icon: Film, color: 'text-indigo-400' },
     { name: 'Hoạt Hình', path: '/danh-sach/hoat-hinh', icon: Library, color: 'text-emerald-400' },
     { name: 'Phim Mới', path: '/danh-sach/phim-moi', icon: Sparkles, color: 'text-yellow-400' },
+    { name: 'Xem Chung', path: '/xem-chung', icon: Users, color: 'text-indigo-400' },
   ];
 
   const personalLinks = [
