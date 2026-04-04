@@ -373,7 +373,7 @@ export const WatchTogetherPage = () => {
   };
 
   // Loading / not-joined screen
-  if (!joined || (loading && !room)) {
+  if (!joined) {
     if (notFound) {
       return (
         <div className="min-h-screen bg-slate-950 flex items-center justify-center">
@@ -386,14 +386,8 @@ export const WatchTogetherPage = () => {
         </div>
       );
     }
-    if (!userName) {
-      return <JoinScreen roomId={roomId!} onJoin={handleJoin} />;
-    }
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <Loader2 size={40} className="text-indigo-500 animate-spin" />
-      </div>
-    );
+    // Always show JoinScreen (saved name is pre-filled as placeholder)
+    return <JoinScreen roomId={roomId!} onJoin={handleJoin} />;
   }
 
   if (!room || !currentEpisode) {
