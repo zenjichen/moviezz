@@ -110,18 +110,37 @@ export const MovieDetailPage = () => {
     }
   };
 
+  const buildMovieShareUrl = () => {
+    if (!movie) return window.location.href;
+
+    if (historyItem?.episodeSlug) {
+      const params = new URLSearchParams();
+      if (historyItem.serverIndex !== undefined) params.set('sv', String(historyItem.serverIndex));
+      if (historyItem.timestamp > 0) params.set('t', String(Math.floor(historyItem.timestamp)));
+
+      const query = params.toString();
+      return `${window.location.origin}${window.location.pathname}#/xem-phim/${movie.slug}/${historyItem.episodeSlug}${query ? `?${query}` : ''}`;
+    }
+
+    if (firstEpisode) {
+      return `${window.location.origin}${window.location.pathname}#/xem-phim/${movie.slug}/${firstEpisode.slug}?sv=${activeServerIndex}`;
+    }
+
+    return `${window.location.origin}${window.location.pathname}#/phim/${movie.slug}`;
+  };
+
   const shareFacebook = () => {
-    const url = `https://facebook.com/sharer/sharer.php?u=${encodeURIComponent(window.location.href)}`;
+    const url = `https://facebook.com/sharer/sharer.php?u=${encodeURIComponent(buildMovieShareUrl())}`;
     window.open(url, '_blank');
   };
 
   const shareZalo = () => {
-    const url = `https://zalo.me/share?url=${encodeURIComponent(window.location.href)}`;
+    const url = `https://zalo.me/share?url=${encodeURIComponent(buildMovieShareUrl())}`;
     window.open(url, '_blank');
   };
 
   const copyToClipboard = () => {
-    navigator.clipboard.writeText(window.location.href);
+    navigator.clipboard.writeText(buildMovieShareUrl());
     setCopySuccess(true);
     setTimeout(() => setCopySuccess(false), 2000);
   };
