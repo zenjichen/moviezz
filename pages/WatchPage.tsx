@@ -29,6 +29,8 @@ export const WatchPage = () => {
   const [creatingRoom, setCreatingRoom] = useState(false);
   const [wtRoomLink, setWtRoomLink] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+  const currentPlaybackTime = useRef(0);
 
   useEffect(() => {
     // Scroll to top whenever episodeSlug changes to focus on the video player
@@ -86,6 +88,7 @@ export const WatchPage = () => {
   }, [episodeSlug, activeServerIndex, serverList, slug, navigate]);
 
   const handleTimeUpdate = (currentTime: number) => {
+    currentPlaybackTime.current = currentTime;
     if (!movie || !currentEpisode) return;
     const now = Date.now();
     if (now - lastSavedTime.current > 5000) {
@@ -107,9 +110,36 @@ export const WatchPage = () => {
     console.log("Video ended.");
   };
 
+  const getSharedStartTime = () => {
+    const tParam = searchParams.get('t');
+    if (!tParam) return null;
+
+    const parsedTime = Number(tParam);
+    return Number.isFinite(parsedTime) && parsedTime > 0 ? parsedTime : null;
+  };
+
+  const handleCopyShareLink = () => {
+    if (!movie || !currentEpisode) return;
+
+    const time = Math.max(0, Math.floor(currentPlaybackTime.current || startTime));
+    const params = new URLSearchParams(searchParams);
+    params.set('sv', String(activeServerIndex));
+    if (time > 0) params.set('t', String(time));
+    else params.delete('t');
+
+    const sharePath = `/xem-phim/${movie.slug}/${currentEpisode.slug}?${params.toString()}`;
+    const shareLink = `${window.location.origin}${window.location.pathname}#${sharePath}`;
+
+    navigator.clipboard.writeText(shareLink).then(() => {
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    });
+  };
+
   const handleCreateWatchTogether = async () => {
     if (!movie || !currentEpisode) return;
     setCreatingRoom(true);
+    const roomStartTime = Math.max(0, Math.floor(currentPlaybackTime.current || startTime));
     const roomId = generateRoomId();
     let user = getLocalUser();
     if (!user) {
@@ -128,7 +158,7 @@ export const WatchPage = () => {
       hostEmoji: user.emoji,
       isPublic: false,
       lastActive: Date.now(),
-      playback: { isPlaying: false, currentTime: 0, updatedAt: Date.now() },
+      playback: { isPlaying: false, currentTime: roomStartTime, updatedAt: Date.now() },
       members: {
         [user.id]: { name: user.name, emoji: user.emoji, isHost: true, lastSeen: Date.now() }
       },
@@ -170,7 +200,8 @@ export const WatchPage = () => {
   const nextEp = currentIndex < currentServerData.length - 1 ? currentServerData[currentIndex + 1] : null;
 
   const history = storage.getHistoryItem(movie.slug);
-  const startTime = (history && history.episodeSlug === currentEpisode.slug) ? history.timestamp : 0;
+  const sharedStartTime = getSharedStartTime();
+  const startTime = sharedStartTime ?? ((history && history.episodeSlug === currentEpisode.slug) ? history.timestamp : 0);
   
   // Logic lựa chọn nguồn phát
   const serverName = serverList[activeServerIndex]?.server_name || '';
@@ -193,14 +224,23 @@ export const WatchPage = () => {
                     <span className="flex-shrink-0">/</span>
                     <span className="text-white font-bold flex-shrink-0">Tập {currentEpisode.name}</span>
                </div>
-               <button
-                 onClick={handleCreateWatchTogether}
-                 disabled={creatingRoom}
-                 className="flex-shrink-0 flex items-center gap-1.5 h-8 px-3 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-600/40 hover:border-indigo-500 text-indigo-400 hover:text-white text-xs font-bold rounded-xl transition-all disabled:opacity-50"
-               >
-                 {creatingRoom ? <Loader2 size={12} className="animate-spin" /> : <Users size={12} />}
-                 Xem chung
-               </button>
+               <div className="flex flex-shrink-0 items-center gap-2">
+                 <button
+                   onClick={handleCopyShareLink}
+                   className={`flex items-center gap-1.5 h-8 px-3 border text-xs font-bold rounded-xl transition-all ${shareCopied ? 'bg-green-500/20 border-green-500/50 text-green-400' : 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-white'}`}
+                 >
+                   {shareCopied ? <Check size={12} /> : <Copy size={12} />}
+                   {shareCopied ? 'Đã copy' : 'Share mốc này'}
+                 </button>
+                 <button
+                   onClick={handleCreateWatchTogether}
+                   disabled={creatingRoom}
+                   className="flex items-center gap-1.5 h-8 px-3 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-600/40 hover:border-indigo-500 text-indigo-400 hover:text-white text-xs font-bold rounded-xl transition-all disabled:opacity-50"
+                 >
+                   {creatingRoom ? <Loader2 size={12} className="animate-spin" /> : <Users size={12} />}
+                   Xem chung
+                 </button>
+               </div>
            </div>
 
            <div className="w-full bg-black rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10 mb-6">
