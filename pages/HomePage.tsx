@@ -9,6 +9,8 @@ import { Link, useNavigationType } from 'react-router-dom';
 
 // Persistent variable to store scroll position across navigations
 let homePageScrollPos = 0;
+const HOME_CACHE_KEY = 'ha-movie-home-sections-v1';
+const HOME_CACHE_TTL = 15 * 60 * 1000;
 
 const HeroSlider = ({ movies }: { movies: Movie[] }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -452,7 +454,23 @@ export const HomePage = () => {
   };
 
   useEffect(() => {
+    let isActive = true;
+
     const fetchData = async () => {
+      // Render the last successful catalogue immediately. The live request below
+      // still refreshes it in the background, so this never serves stale data
+      // for longer than the short TTL.
+      try {
+        const cached = JSON.parse(localStorage.getItem(HOME_CACHE_KEY) || 'null');
+        if (cached?.savedAt && Date.now() - cached.savedAt < HOME_CACHE_TTL && cached.data) {
+          setData(cached.data);
+          setErrors(cached.errors || {});
+          setLoading(false);
+        }
+      } catch {
+        localStorage.removeItem(HOME_CACHE_KEY);
+      }
+
       // Increased maxPage rotation to ensure "New Movies Every Day" feel
       const childhoodYear = getChildhoodYear();
       const koreanPage = getDailyPage(10);
@@ -483,6 +501,7 @@ export const HomePage = () => {
       ];
 
       const results = await Promise.allSettled(endpoints.map(e => e.fn()));
+      if (!isActive) return;
       
       const newData: any = {};
       const newErrors: any = {};
@@ -500,8 +519,19 @@ export const HomePage = () => {
       setData(newData);
       setErrors(newErrors);
       setLoading(false);
+
+      try {
+        localStorage.setItem(HOME_CACHE_KEY, JSON.stringify({
+          savedAt: Date.now(),
+          data: newData,
+          errors: newErrors
+        }));
+      } catch {
+        // Storage can be unavailable or full; the live response is still shown.
+      }
     };
     fetchData();
+    return () => { isActive = false; };
   }, []);
 
   // Handle scroll position tracking

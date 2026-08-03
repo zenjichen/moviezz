@@ -8,18 +8,43 @@ const VSMOV_BASE_URL = 'https://vsmov.com/api';
 
 const IMG_PREFIX = 'https://phimimg.com/';
 const NGUONC_IMG_PREFIX = 'https://phim.nguonc.com/';
-const OPHIM_IMG_PREFIX = 'https://img.ophim1.com/uploads/movies/';
-const OPHIM_CDN_IMG = 'https://img.ophim.live/uploads/movies/';
+const OPHIM_IMG_HOST = 'https://img.ophim1.com/';
+const REQUEST_TIMEOUT_MS = 8000;
+
+/**
+ * The OPhim API currently returns paths such as "uploads/movies/foo.jpg".
+ * Older code added "uploads/movies/" once again, resulting in 404 thumbnail
+ * URLs. Keep the normalisation in one place so list and detail pages agree.
+ */
+const toOPhimImageUrl = (url: string) => {
+  if (!url || url.startsWith('http')) return url;
+  const path = url.replace(/^\/+/, '');
+  return `${OPHIM_IMG_HOST}${path.startsWith('uploads/') ? path : `uploads/movies/${path}`}`;
+};
+
+/** Fail fast instead of leaving the UI blocked by an unresponsive provider. */
+const fetchJson = async (url: string, timeout = REQUEST_TIMEOUT_MS): Promise<any> => {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) throw new Error(`Request failed (${response.status})`);
+    return await response.json();
+  } finally {
+    window.clearTimeout(timer);
+  }
+};
 
 // Normalize OPhim items: add full image URL prefix for relative paths
 const normalizeOPhimItems = (items: any[]): any[] => {
   return items.map(item => {
     const m = { ...item };
     if (m.thumb_url && !m.thumb_url.startsWith('http')) {
-      m.thumb_url = `${OPHIM_CDN_IMG}${m.thumb_url}`;
+      m.thumb_url = toOPhimImageUrl(m.thumb_url);
     }
     if (m.poster_url && !m.poster_url.startsWith('http')) {
-      m.poster_url = `${OPHIM_CDN_IMG}${m.poster_url}`;
+      m.poster_url = toOPhimImageUrl(m.poster_url);
     }
     return m;
   });
@@ -27,10 +52,11 @@ const normalizeOPhimItems = (items: any[]): any[] => {
 
 export const getImageUrl = (url: string) => {
   if (!url) return '';
-  
-  if (url.startsWith('http')) {
-    return `https://images.weserv.nl/?url=${encodeURIComponent(url)}&output=webp&q=80`;
-  }
+
+  // Loading every image through images.weserv.nl made the entire catalogue
+  // depend on one third-party proxy. Direct image requests are cacheable by the
+  // browser and do not require CORS permission for <img> elements.
+  if (url.startsWith('http')) return url;
   
   let fullUrl = '';
   if (url.startsWith('//')) {
@@ -39,7 +65,7 @@ export const getImageUrl = (url: string) => {
     fullUrl = `${IMG_PREFIX}${url}`;
   }
 
-  return `https://images.weserv.nl/?url=${encodeURIComponent(fullUrl)}&output=webp&q=80`;
+  return fullUrl;
 };
 
 // Normalize VSMov items (images are already absolute URLs)
@@ -57,8 +83,8 @@ export const api = {
   getNewUpdates: async (page = 1): Promise<ApiResponseList<any>> => {
     try {
       const [ophimRes, vsmovRes] = await Promise.allSettled([
-        fetch(`${OPHIM_BASE_URL}/v1/api/danh-sach/phim-moi-cap-nhat?page=${page}`).then(r => r.json()),
-        fetch(`${VSMOV_BASE_URL}/danh-sach/phim-moi-cap-nhat?page=${page}`).then(r => r.json())
+        fetchJson(`${OPHIM_BASE_URL}/v1/api/danh-sach/phim-moi-cap-nhat?page=${page}`),
+        fetchJson(`${VSMOV_BASE_URL}/danh-sach/phim-moi-cap-nhat?page=${page}`)
       ]);
 
       const ophimItems = (ophimRes.status === 'fulfilled' && ophimRes.value?.status === 'success')
@@ -87,11 +113,9 @@ export const api = {
       throw new Error('All sources failed');
     } catch {
       try {
-        const fallback = await fetch(`${BASE_URL}/danh-sach/phim-moi-cap-nhat-v3?page=${page}`);
-        return await fallback.json();
+        return await fetchJson(`${BASE_URL}/danh-sach/phim-moi-cap-nhat-v3?page=${page}`);
       } catch {
-        const fallback2 = await fetch(`${BASE_URL}/danh-sach/phim-moi-cap-nhat?page=${page}`);
-        return await fallback2.json();
+        return await fetchJson(`${BASE_URL}/danh-sach/phim-moi-cap-nhat?page=${page}`);
       }
     }
   },
@@ -110,8 +134,7 @@ export const api = {
       if (lang) params.sort_lang = lang;
 
       const query = new URLSearchParams(params);
-      const res = await fetch(`${OPHIM_BASE_URL}/v1/api/danh-sach/${type}?${query.toString()}`);
-      const json = await res.json();
+      const json = await fetchJson(`${OPHIM_BASE_URL}/v1/api/danh-sach/${type}?${query.toString()}`);
       if (json.status === 'success' && json.data?.items) {
         json.data.items = normalizeOPhimItems(json.data.items);
         return json;
@@ -131,58 +154,50 @@ export const api = {
       if (lang) params.sort_lang = lang;
 
       const query = new URLSearchParams(params);
-      const res = await fetch(`${BASE_URL}/v1/api/danh-sach/${type}?${query.toString()}`);
-      return res.json();
+      return fetchJson(`${BASE_URL}/v1/api/danh-sach/${type}?${query.toString()}`);
     }
   },
 
   getFilters: async (filterType: 'the-loai' | 'quoc-gia') => {
     try {
-      const res = await fetch(`${OPHIM_BASE_URL}/v1/api/${filterType}`);
-      const json = await res.json();
+      const json = await fetchJson(`${OPHIM_BASE_URL}/v1/api/${filterType}`);
       if (json.status === 'success' && json.data?.items) {
         return json.data.items; // Return array directly: [{_id, name, slug}, ...]
       }
       throw new Error('OPhim filters failed');
     } catch {
-      const res = await fetch(`${BASE_URL}/${filterType}`);
-      return res.json();
+      return fetchJson(`${BASE_URL}/${filterType}`);
     }
   },
 
   getFiltersItems: async (filterType: 'the-loai' | 'quoc-gia') => {
     try {
-      const res = await fetch(`${OPHIM_BASE_URL}/v1/api/${filterType}`);
-      const json = await res.json();
+      const json = await fetchJson(`${OPHIM_BASE_URL}/v1/api/${filterType}`);
       if (json.status === 'success' && json.data?.items) {
         return json.data.items;
       }
       throw new Error('OPhim filters failed');
     } catch {
-      const res = await fetch(`${BASE_URL}/${filterType}`);
-      return res.json();
+      return fetchJson(`${BASE_URL}/${filterType}`);
     }
   },
 
   getMoviesByFilter: async (filterType: 'the-loai' | 'quoc-gia', slug: string, page = 1, limit = 18) => {
     try {
-      const res = await fetch(`${OPHIM_BASE_URL}/v1/api/${filterType}/${slug}?page=${page}&limit=${limit}`);
-      const json = await res.json();
+      const json = await fetchJson(`${OPHIM_BASE_URL}/v1/api/${filterType}/${slug}?page=${page}&limit=${limit}`);
       if (json.status === 'success' && json.data?.items) {
         json.data.items = normalizeOPhimItems(json.data.items);
         return json;
       }
       throw new Error('OPhim filter failed');
     } catch {
-      const res = await fetch(`${BASE_URL}/v1/api/${filterType}/${slug}?page=${page}&limit=${limit}`);
-      return res.json();
+      return fetchJson(`${BASE_URL}/v1/api/${filterType}/${slug}?page=${page}&limit=${limit}`);
     }
   },
 
   getMovieDetailMain: async (slug: string) => {
       try {
-        const res = await fetch(`${BASE_URL}/phim/${slug}`);
-        return await res.json();
+        return await fetchJson(`${BASE_URL}/phim/${slug}`);
       } catch (e) {
           return null;
       }
@@ -190,8 +205,7 @@ export const api = {
 
   getMovieDetailOPhim: async (slug: string) => {
     try {
-      const res = await fetch(`${OPHIM_BASE_URL}/v1/api/phim/${slug}`);
-      const data = await res.json();
+      const data = await fetchJson(`${OPHIM_BASE_URL}/v1/api/phim/${slug}`);
       if (data.status !== 'success' && !data.data?.item) return null;
       
       const m = data.data.item;
@@ -208,8 +222,8 @@ export const api = {
 
       let thumb = m.thumb_url;
       let poster = m.poster_url;
-      if (thumb && !thumb.startsWith('http')) thumb = `${OPHIM_IMG_PREFIX}${thumb}`;
-      if (poster && !poster.startsWith('http')) poster = `${OPHIM_IMG_PREFIX}${poster}`;
+      thumb = toOPhimImageUrl(thumb);
+      poster = toOPhimImageUrl(poster);
 
       const movie = {
         ...m,
@@ -225,8 +239,7 @@ export const api = {
 
   getMovieDetailNguonC: async (slug: string) => {
     try {
-      const res = await fetch(`${NGUONC_BASE_URL}/film/${slug}`);
-      const data = await res.json();
+      const data = await fetchJson(`${NGUONC_BASE_URL}/film/${slug}`);
       if (data.status !== 'success' && !data.movie) return null;
       
       const m = data.movie;
@@ -249,8 +262,7 @@ export const api = {
 
   getMovieDetailVSMov: async (slug: string) => {
     try {
-      const res = await fetch(`${VSMOV_BASE_URL}/phim/${slug}`);
-      const data = await res.json();
+      const data = await fetchJson(`${VSMOV_BASE_URL}/phim/${slug}`);
       if (!data.status || !data.movie) return null;
 
       const m = data.movie;
@@ -425,10 +437,10 @@ export const api = {
     const fetchFromSources = async (kw: string) => {
       try {
         const [resOphim, resMain, resNguonc, resVsmov] = await Promise.allSettled([
-          fetch(`${OPHIM_BASE_URL}/v1/api/tim-kiem?keyword=${encodeURIComponent(kw)}&limit=${limit}`).then(r => r.json()),
-          fetch(`${BASE_URL}/v1/api/tim-kiem?keyword=${encodeURIComponent(kw)}&limit=${limit}`).then(r => r.json()),
-          fetch(`${NGUONC_BASE_URL}/search?keyword=${encodeURIComponent(kw)}`).then(r => r.json()),
-          fetch(`${VSMOV_BASE_URL}/tim-kiem?keyword=${encodeURIComponent(kw)}&limit=${limit}`).then(r => r.json())
+          fetchJson(`${OPHIM_BASE_URL}/v1/api/tim-kiem?keyword=${encodeURIComponent(kw)}&limit=${limit}`),
+          fetchJson(`${BASE_URL}/v1/api/tim-kiem?keyword=${encodeURIComponent(kw)}&limit=${limit}`),
+          fetchJson(`${NGUONC_BASE_URL}/search?keyword=${encodeURIComponent(kw)}`),
+          fetchJson(`${VSMOV_BASE_URL}/tim-kiem?keyword=${encodeURIComponent(kw)}&limit=${limit}`)
         ]);
 
         const itemsOphim = resOphim.status === 'fulfilled' ? (resOphim.value.data?.items || resOphim.value.items || []) : [];
@@ -442,10 +454,8 @@ export const api = {
 
         // Process OPhim images if they were selected as priority
         combined.forEach((m: any) => {
-            if (!m.thumb_url.startsWith('http')) {
-                m.thumb_url = `${OPHIM_IMG_PREFIX}${m.thumb_url}`;
-                m.poster_url = `${OPHIM_IMG_PREFIX}${m.poster_url}`;
-            }
+            m.thumb_url = toOPhimImageUrl(m.thumb_url);
+            m.poster_url = toOPhimImageUrl(m.poster_url);
         });
 
         itemsMain.forEach((m: any) => {
@@ -520,7 +530,6 @@ export const api = {
   },
 
   searchMovies: async (keyword: string, limit = 24): Promise<ApiResponseSearch> => {
-    const res = await fetch(`${BASE_URL}/v1/api/tim-kiem?keyword=${encodeURIComponent(keyword)}&limit=${limit}`);
-    return res.json();
+    return fetchJson(`${BASE_URL}/v1/api/tim-kiem?keyword=${encodeURIComponent(keyword)}&limit=${limit}`);
   }
 };
