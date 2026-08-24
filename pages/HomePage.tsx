@@ -31,7 +31,18 @@ const HeroSlider = ({ movies }: { movies: Movie[] }) => {
     setCurrentIndex((prev) => (prev + 1) % movies.length);
   };
 
-  if (!movies.length) return null;
+  if (!movies.length) return (
+    <div className="relative w-full h-[85vh] md:h-screen overflow-hidden bg-slate-950 flex items-center justify-center">
+      <div className="absolute inset-0 bg-gradient-to-b from-indigo-950/30 via-slate-950 to-slate-950"></div>
+      <div className="relative z-10 flex flex-col items-center gap-6 animate-pulse">
+        <div className="w-16 h-16 bg-indigo-600/30 rounded-2xl flex items-center justify-center">
+          <Sparkles size={32} className="text-indigo-400/50" />
+        </div>
+        <div className="h-8 w-64 bg-slate-800/50 rounded-full"></div>
+        <div className="h-4 w-48 bg-slate-800/30 rounded-full"></div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="relative w-full h-[85vh] md:h-screen overflow-hidden group">
@@ -596,7 +607,7 @@ export const HomePage = () => {
 
   return (
     <div className="animate-in fade-in duration-700 pb-4">
-      {loading ? <div className="h-screen bg-slate-950 flex items-center justify-center"><Loader /></div> : <HeroSlider movies={data.news?.slice(0, 5) || []} />}
+      {(loading && (!data.news || data.news.length === 0)) ? <div className="h-screen bg-slate-950 flex items-center justify-center"><Loader /></div> : <HeroSlider movies={data.news?.slice(0, 5) || []} />}
       
       <div className="mx-auto px-4 md:px-[3cm] mt-12 md:mt-6 relative z-10">
           
